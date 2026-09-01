@@ -1,30 +1,22 @@
 local M = {}
 
 local config = {
-	padding = 2,
-	border = nil,
+	border = 'rounded',
+	width = 0.8,
+	height = 0.8,
 	zindex = nil,
 	win_opts = {},
 }
 
-local function editor_height()
-	local height = vim.o.lines - vim.o.cmdheight
-	if vim.o.showtabline == 2 or (vim.o.showtabline == 1 and #vim.api.nvim_list_tabpages() > 1) then
-		height = height - 1
-	end
-	if vim.o.laststatus >= 2 or (vim.o.laststatus == 1 and #vim.api.nvim_tabpage_list_wins(0) > 1) then
-		height = height - 1
-	end
-	return height
-end
-
 local function dimensions()
+	local width = math.floor(vim.o.columns * config.width)
+	local height = math.floor(vim.o.lines * config.height)
 	return {
 		relative = 'editor',
-		row = config.padding,
-		col = config.padding,
-		width = vim.o.columns - 2 - 2 * config.padding,
-		height = editor_height() - 2 * config.padding,
+		row = math.floor((vim.o.lines - height) / 2),
+		col = math.floor((vim.o.columns - width) / 2),
+		width = width,
+		height = height,
 		border = config.border,
 		zindex = config.zindex,
 		style = 'minimal',
@@ -32,18 +24,7 @@ local function dimensions()
 end
 
 local function open_float(buf)
-	local source_win = vim.api.nvim_get_current_win()
-	local source_options = {}
-	for option, info in pairs(vim.api.nvim_get_all_options_info()) do
-		if info.scope == 'win' and config.win_opts[option] == nil then
-			source_options[option] = vim.api.nvim_get_option_value(option, { win = source_win })
-		end
-	end
-
 	local win = vim.api.nvim_open_win(buf, true, dimensions())
-	for option, value in pairs(source_options) do
-		vim.api.nvim_set_option_value(option, value, { scope = 'local', win = win })
-	end
 	for option, value in pairs(config.win_opts) do
 		vim.api.nvim_set_option_value(option, value, { scope = 'local', win = win })
 	end

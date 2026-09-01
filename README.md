@@ -27,8 +27,9 @@ floating window.
 local float_command = require('float-command')
 
 float_command.setup({
-  padding = 2,
-  border = nil,
+  border = 'rounded',
+  width = 0.8,
+  height = 0.8,
   zindex = nil,
   win_opts = {},
 })
