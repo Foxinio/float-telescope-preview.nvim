@@ -1,20 +1,68 @@
 local M = {}
 
+local config = {
+	padding = 2,
+	border = nil,
+	zindex = nil,
+	win_opts = {},
+}
+
+local function editor_height()
+	local height = vim.o.lines - vim.o.cmdheight
+	if vim.o.showtabline == 2 or (vim.o.showtabline == 1 and #vim.api.nvim_list_tabpages() > 1) then
+		height = height - 1
+	end
+	if vim.o.laststatus >= 2 or (vim.o.laststatus == 1 and #vim.api.nvim_tabpage_list_wins(0) > 1) then
+		height = height - 1
+	end
+	return height
+end
+
+local function dimensions()
+	return {
+		relative = 'editor',
+		row = config.padding,
+		col = config.padding,
+		width = vim.o.columns - 2 - 2 * config.padding,
+		height = editor_height() - 2 * config.padding,
+		border = config.border,
+		zindex = config.zindex,
+		style = 'minimal',
+	}
+end
+
 local function open_float(buf)
 	local source_win = vim.api.nvim_get_current_win()
-	local float_options = require('overseer.config').task_win.win_opts
 	local source_options = {}
 	for option, info in pairs(vim.api.nvim_get_all_options_info()) do
-		if info.scope == 'win' and float_options[option] == nil then
+		if info.scope == 'win' and config.win_opts[option] == nil then
 			source_options[option] = vim.api.nvim_get_option_value(option, { win = source_win })
 		end
 	end
 
-	local win = require('overseer.layout').open_fullscreen_float(buf)
+	local win = vim.api.nvim_open_win(buf, true, dimensions())
 	for option, value in pairs(source_options) do
 		vim.api.nvim_set_option_value(option, value, { scope = 'local', win = win })
 	end
+	for option, value in pairs(config.win_opts) do
+		vim.api.nvim_set_option_value(option, value, { scope = 'local', win = win })
+	end
+	vim.api.nvim_create_autocmd('WinLeave', {
+		once = true,
+		nested = true,
+		callback = function() pcall(vim.api.nvim_win_close, win, true) end,
+	})
+	vim.api.nvim_create_autocmd('VimResized', {
+		callback = function()
+			local exists = pcall(vim.api.nvim_win_set_config, win, dimensions())
+			return not exists
+		end,
+	})
 	return win
+end
+
+function M.setup(opts)
+	config = vim.tbl_deep_extend('force', config, opts or {})
 end
 
 function M.open(command)

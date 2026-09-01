@@ -1,24 +1,21 @@
-# float-command.nvim
+# float-telescope-preview.nvim
 
-Open commands, files, LSP jumps, and Telescope selections in an Overseer-style
-fullscreen floating window.
+Open commands, files, LSP jumps, and Telescope selections in a fullscreen
+floating window.
 
 ## Requirements
 
 - Neovim
-- [overseer.nvim](https://github.com/stevearc/overseer.nvim)
 - [telescope.nvim](https://github.com/nvim-telescope/telescope.nvim) for picker integration
 
 ## Installation
 
 ```lua
 {
-  dir = '/path/to/float-command.nvim',
-  dependencies = {
-    'stevearc/overseer.nvim',
-    'nvim-telescope/telescope.nvim',
-  },
+  'Foxinio/float-telescope-preview.nvim',
+  dependencies = { 'nvim-telescope/telescope.nvim' },
   config = function()
+	require('float-command').setup()
     require('telescope').load_extension('float_command')
   end,
 }
@@ -28,6 +25,13 @@ fullscreen floating window.
 
 ```lua
 local float_command = require('float-command')
+
+float_command.setup({
+  padding = 2,
+  border = nil,
+  zindex = nil,
+  win_opts = {},
+})
 
 float_command.open('messages')
 float_command.open_file('/path/to/file')
