@@ -40,6 +40,9 @@ float_command.open_lsp(vim.lsp.buf.declaration)
 float_command.open_telescope(require('telescope.builtin').lsp_definitions)
 ```
 
+`:Float {command}` runs an Ex command in the float, for example
+`:Float help nvim_open_win` or `:Float Man ls`.
+
 The same functions are exported through
 `require('telescope').extensions.float_command` after loading the extension.
 
