@@ -4,7 +4,6 @@ local config = {
 	border = 'rounded',
 	width = 0.8,
 	height = 0.8,
-	zindex = nil,
 	win_opts = {},
 }
 
@@ -23,21 +22,37 @@ local function dimensions()
 	}
 end
 
+-- A placeholder buffer that disappears once a command replaces it (e.g. :edit).
+local function scratch()
+	local buf = vim.api.nvim_create_buf(false, true)
+	vim.bo[buf].bufhidden = 'wipe'
+	return buf
+end
+
 local function open_float(buf)
 	local win = vim.api.nvim_open_win(buf, true, dimensions())
 	for option, value in pairs(config.win_opts) do
 		vim.api.nvim_set_option_value(option, value, { scope = 'local', win = win })
 	end
+	local group = vim.api.nvim_create_augroup('float-command-' .. win, { clear = true })
 	vim.api.nvim_create_autocmd('WinLeave', {
-		once = true,
+		group = group,
 		nested = true,
-		callback = function() pcall(vim.api.nvim_win_close, win, true) end,
+		callback = function()
+			-- Close only when leaving the float itself, not on unrelated window changes.
+			if vim.api.nvim_get_current_win() == win then
+				vim.schedule(function() pcall(vim.api.nvim_win_close, win, true) end)
+			end
+		end,
 	})
 	vim.api.nvim_create_autocmd('VimResized', {
-		callback = function()
-			local exists = pcall(vim.api.nvim_win_set_config, win, dimensions())
-			return not exists
-		end,
+		group = group,
+		callback = function() pcall(vim.api.nvim_win_set_config, win, dimensions()) end,
+	})
+	vim.api.nvim_create_autocmd('WinClosed', {
+		group = group,
+		pattern = tostring(win),
+		callback = function() pcall(vim.api.nvim_del_augroup_by_id, group) end,
 	})
 	return win
 end
@@ -47,9 +62,8 @@ function M.setup(opts)
 end
 
 function M.open(command)
-	local buf = vim.api.nvim_create_buf(false, true)
 	local original_win = vim.api.nvim_get_current_win()
-	open_float(buf)
+	local win = open_float(scratch())
 
 	local ok, err
 	if type(command) == 'function' then
@@ -58,11 +72,13 @@ function M.open(command)
 		ok, err = pcall(vim.cmd, command)
 	end
 	if not ok then
+		pcall(vim.api.nvim_win_close, win, true)
 		if vim.api.nvim_win_is_valid(original_win) then
 			vim.api.nvim_set_current_win(original_win)
 		end
 		vim.notify(err, vim.log.levels.ERROR)
 	end
+	return win
 end
 
 function M.open_file(path)
@@ -71,8 +87,31 @@ function M.open_file(path)
 	end
 end
 
+-- `action` is an LSP location request such as vim.lsp.buf.definition. A single
+-- location opens in the float, several go to the quickfix list, none notifies.
 function M.open_lsp(action)
-	M.open(action)
+	action({
+		on_list = function(list)
+			local items = list.items or {}
+			if #items == 0 then
+				vim.notify('No locations found', vim.log.levels.INFO)
+			elseif #items > 1 then
+				vim.fn.setqflist({}, ' ', list)
+				vim.cmd('botright copen')
+			else
+				local item = items[1]
+				M.open(function()
+					if item.bufnr and vim.api.nvim_buf_is_valid(item.bufnr) then
+						vim.bo[item.bufnr].buflisted = true
+						vim.api.nvim_win_set_buf(0, item.bufnr)
+					else
+						vim.cmd.edit(vim.fn.fnameescape(item.filename))
+					end
+					pcall(vim.api.nvim_win_set_cursor, 0, { item.lnum, math.max((item.col or 1) - 1, 0) })
+				end)
+			end
+		end,
+	})
 end
 
 function M.open_telescope_selection(prompt_bufnr)
@@ -81,7 +120,7 @@ function M.open_telescope_selection(prompt_bufnr)
 		return
 	end
 
-	require('telescope.pickers').on_close_prompt(prompt_bufnr)
+	require('telescope.actions').close(prompt_bufnr)
 
 	local bufnr = entry.bufnr
 	if bufnr then
@@ -95,7 +134,7 @@ function M.open_telescope_selection(prompt_bufnr)
 			return
 		end
 
-		open_float(vim.api.nvim_create_buf(false, true))
+		open_float(scratch())
 		vim.cmd.edit(vim.fn.fnameescape(path))
 	end
 
@@ -105,16 +144,17 @@ function M.open_telescope_selection(prompt_bufnr)
 	end
 end
 
-function M.open_telescope(picker)
-	picker({
-		jump_type = 'never',
-		attach_mappings = function(prompt_bufnr)
+function M.open_telescope(picker, opts)
+	opts = opts or {}
+	local attach_mappings = opts.attach_mappings
+	picker(vim.tbl_extend('force', { jump_type = 'never' }, opts, {
+		attach_mappings = function(prompt_bufnr, map)
 			require('telescope.actions').select_default:replace(function()
 				M.open_telescope_selection(prompt_bufnr)
 			end)
-			return true
+			return not attach_mappings or attach_mappings(prompt_bufnr, map)
 		end,
-	})
+	}))
 end
 
 return M
