@@ -56,5 +56,5 @@ The same functions are exported through
 Run the smoke check with:
 
 ```sh
-nvim --headless -u NONE -l tests/smoke.lua
+make test
 ```
